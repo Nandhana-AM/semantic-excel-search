@@ -4,7 +4,7 @@ An intelligent, domain-agnostic FastAPI service that accepts any user-uploaded E
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
 * **Domain-Agnostic Query Parsing**: Dynamically extracts roles, locations, names, and individual skills from the uploaded Excel sheet to build a vocabulary context. Queries are parsed case-insensitively using regex word-boundary boundaries and singular/plural variations.
 * **Exact & Fuzzy Skill Splitting**: Distinguishes between **known skills** (existing in the dataset or skill dictionary) and **dynamic skills** (out-of-dictionary skills like "mud work" or "biotechnology" parsed via NLP triggers).
@@ -14,7 +14,7 @@ An intelligent, domain-agnostic FastAPI service that accepts any user-uploaded E
 
 ---
 
-## 🏗️ Architecture & Component Flow
+## Architecture & Component Flow
 
 ```
                      ┌──────────────────────────┐
@@ -64,7 +64,7 @@ An intelligent, domain-agnostic FastAPI service that accepts any user-uploaded E
 
 ---
 
-## 🚦 Intent Flows & Routing Logic
+## Intent Flows & Routing Logic
 
 When `mode` is set to `auto` (default), the API automatically routes queries to the most appropriate search mode based on extracted components:
 
@@ -94,7 +94,7 @@ When `mode` is set to `auto` (default), the API automatically routes queries to 
 
 ---
 
-## 🛠️ Step-by-Step Installation & Run Guide
+## Step-by-Step Installation & Run Guide
 
 ### Prerequisites
 * Python 3.10+
@@ -149,7 +149,7 @@ pytest tests/ -v
 
 ---
 
-## 🐳 Docker Deployment
+## Docker Deployment
 
 The application is containerized and can be launched instantly using Docker Compose:
 
@@ -161,7 +161,7 @@ The server will bind to port `8000` on the host machine.
 
 ---
 
-## 📬 API Specifications
+## API Specifications
 
 ### `GET /health`
 Validates that the server is up and responsive.
