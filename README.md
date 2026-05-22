@@ -1,182 +1,215 @@
-# Excel Intelligent Search API — Week 3
+# Excel Intelligent Search API
 
-A FastAPI service that accepts a user-uploaded Excel file and searches it using **structured filtering**, **semantic search**, or **hybrid** mode.
+An intelligent, domain-agnostic FastAPI service that accepts any user-uploaded Excel directory/dataset and allows natural language querying against it using **Structured Filtering**, **Semantic Search**, or **Hybrid Search**.
 
 ---
 
-## Architecture
+## 🌟 Key Features
+
+* **Domain-Agnostic Query Parsing**: Dynamically extracts roles, locations, names, and individual skills from the uploaded Excel sheet to build a vocabulary context. Queries are parsed case-insensitively using regex word-boundary boundaries and singular/plural variations.
+* **Exact & Fuzzy Skill Splitting**: Distinguishes between **known skills** (existing in the dataset or skill dictionary) and **dynamic skills** (out-of-dictionary skills like "mud work" or "biotechnology" parsed via NLP triggers).
+* **Strict Constraint Matching**: Employs hard filters for explicit role, location, name, and known skill parameters.
+* **False-Positive Prevention**: Dynamic skills are validated against the candidate's core profile (`Role | Skills`) using sentence embeddings. Profiles with zero semantic overlap (similarity score `< 0.12`) are automatically filtered out.
+* **Hybrid Search Re-Ranking**: Combines the precision of structured filtering with the contextual awareness of semantic search.
+
+---
+
+## 🏗️ Architecture & Component Flow
 
 ```
-User Uploads Excel + Query
-         │
-    FastAPI /search
-         │
-  ┌──────▼──────┐
-  │  Validation  │  ← check required columns
-  └──────┬──────┘
-         │
-  ┌──────▼──────┐
-  │  Query       │  ← spaCy + regex + rules
-  │  Parser      │    detects role, location,
-  └──────┬──────┘    experience, query type
-         │
-  ┌──────▼──────────────────────────────┐
-  │           Decision Router            │
-  │  STRUCTURED | SEMANTIC | HYBRID     │
-  └──────┬──────────────┬───────────────┘
-         │              │
-  Pandas filters   Embeddings + FAISS
-         │              │
-         └──── Merge ───┘
-                  │
-          JSON Response
+                     ┌──────────────────────────┐
+                     │ User Uploads Excel file  │
+                     │  + Natural Language Query│
+                     └─────────────┬────────────┘
+                                   │
+                     ┌─────────────▼────────────┐
+                     │   FastAPI /search POST   │
+                     └─────────────┬────────────┘
+                                   │
+                     ┌─────────────▼────────────┐
+                     │  Schema & Column Check   │  ← Name, Role, Location, Experience, Skills
+                     └─────────────┬────────────┘
+                                   │
+                     ┌─────────────▼────────────┐
+                     │ Dataset Vocab Extraction │  ← Extracts unique roles, locations, names,
+                     └─────────────┬────────────┘    and individual split skills
+                                   │
+                     ┌─────────────▼────────────┐
+                     │    Query Parser Engine   │  ← Regex, spaCy NER, known/dynamic skills split
+                     └─────────────┬────────────┘
+                                   │
+          ┌────────────────────────┼────────────────────────┐
+          ▼                        ▼                        ▼
+┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│ STRUCTURED Mode  │     │  SEMANTIC Mode   │     │   HYBRID Mode    │
+├──────────────────┤     ├──────────────────┤     ├──────────────────┤
+│ - Filters by name│     │ - Clean & expand │     │ - Structured hard│
+│ - Exact role match│    │   query          │     │   filters first  │
+│ - Location match │     │ - Embeddings via │     │ - Semantic re-rank│
+│ - Experience filtering │   SentenceTransformers││   on subset      │
+│   (range/seniority)│   │ - Cosine sim     │     │ - Dynamic skill  │
+│ - Known skills   │     │   scoring        │     │   check (>= 0.12)│
+└─────────┬────────┘     └─────────┬────────┘     └─────────┬────────┘
+          │                        │                        │
+          └────────────────────────┼────────────────────────┘
+                                   │
+                     ┌─────────────▼────────────┐
+                     │  Deduplicate & Format    │
+                     └─────────────┬────────────┘
+                                   │
+                     ┌─────────────▼────────────┐
+                     │   JSON Response Payload  │
+                     └──────────────────────────┘
 ```
 
 ---
 
-## Required Excel Columns
+## 🚦 Intent Flows & Routing Logic
 
-| Column     | Example              |
-|------------|----------------------|
-| Name       | Alice Johnson        |
-| Role       | Civil Engineer       |
-| Location   | Chennai              |
-| Experience | 5 years              |
-| Skills     | AutoCAD, Tunneling   |
+When `mode` is set to `auto` (default), the API automatically routes queries to the most appropriate search mode based on extracted components:
 
-Column names are case-insensitive.
+### 1. Structured Intent
+* **Trigger**: The query contains structural fields (role, location, name, or experience criteria) but **no skills/expertise** triggers.
+* **Example**: `"show senior developers in Bangalore with 5+ years experience"`
+* **Flow**:
+  1. The dataset is filtered using Pandas based on the parsed constraints.
+  2. Experience levels (e.g., "senior", "freshers") are mapped to numeric ranges.
+  3. No semantic embeddings are generated, optimizing processing speed.
+
+### 2. Semantic Intent
+* **Trigger**: The query asks about skills, competencies, or fuzzy topics without specifying structural attributes, or focuses purely on skills.
+* **Example**: `"who is expert in tunneling and deep excavation"`
+* **Flow**:
+  1. conversational wrappers (e.g. "who is expert in") are stripped to focus on core semantic terms.
+  2. Text embeddings are generated for both the query and the candidate rows (Role + Location + Experience + Skills).
+  3. Similarity is measured using cosine similarity (or FAISS indexing). Profiles scoring above `0.33` are returned, sorted by relevance.
+
+### 3. Hybrid Intent
+* **Trigger**: The query mixes structural constraints with specific skills (known or dynamic).
+* **Example**: `"civil engineers in Chennai who have built bridges"`
+* **Flow**:
+  1. **Phase A (Structured Filter)**: Strict constraints (Role = `"Civil Engineer"`, Location = `"Chennai"`, plus any exact matching Known Skills like `"Bridges"`) are applied as hard filters. This reduces the search space.
+  2. **Phase B (Semantic Ranking)**: Any dynamic skills in the query are encoded. The semantic model scores the filtered subset of candidates.
+  3. **Phase C (Semantic Guard)**: For dynamic/out-of-dictionary skills (e.g. `"mud work"`), we batch-encode the candidate's `"Role | Skills"` and ensure its similarity score is `>= 0.12` to prevent irrelevant matches. Candidates matching the structured criteria but scoring poorly on the skill are excluded.
 
 ---
 
-## Setup
+## 🛠️ Step-by-Step Installation & Run Guide
 
-### Local
+### Prerequisites
+* Python 3.10+
+* pip
+
+### 1. Setup Virtual Environment & Install Dependencies
 
 ```bash
-# Install dependencies
+# Clone the repository (or enter project folder)
+cd excel_search_api-fin
+
+# Create a virtual environment
+python -m venv venv
+
+# Activate the virtual environment
+# On Windows (PowerShell):
+.\venv\Scripts\Activate.ps1
+# On Windows (CMD):
+.\venv\Scripts\activate.bat
+# On macOS/Linux:
+source venv/bin/activate
+
+# Install requirements
 pip install -r requirements.txt
-
-# Download spaCy model
-python -m spacy download en_core_web_sm
-
-# Run the API
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### Docker
-
+### 2. Download the NLP SpaCy Model
+The project uses spaCy's English model for Entity Recognition (NER) to parse names and location filters:
 ```bash
-docker-compose up --build
+python -m spacy download en_core_web_sm
 ```
 
-API will be available at: http://localhost:8000
-
----
-
-## API Endpoints
-
-### `GET /health`
-Returns `{"status": "ok"}`.
-
-### `POST /validate`
-Upload an Excel file to validate its schema.
-
-**Form data:**
-- `file`: Excel file (.xlsx)
-
-**Response:**
-```json
-{
-  "valid": true,
-  "rows": 15,
-  "columns": ["Name", "Role", "Location", "Experience", "Skills"],
-  "message": "Schema is valid. Ready for search."
-}
-```
-
-### `POST /search`
-Upload an Excel file and search it.
-
-**Form data:**
-- `file`: Excel file (.xlsx)
-- `query`: Natural language query (string)
-- `mode`: `auto` | `structured` | `semantic` | `hybrid` (default: `auto`)
-
-**Response:**
-```json
-{
-  "query": "show civil engineers in Chennai",
-  "mode": "structured",
-  "filters_applied": {
-    "role": "Civil",
-    "location": "Chennai"
-  },
-  "total_in_file": 15,
-  "results_count": 2,
-  "results": [
-    {
-      "Name": "Alice Johnson",
-      "Role": "Civil Engineer",
-      "Location": "Chennai",
-      "Experience": "5 years",
-      "Skills": "AutoCAD, Structural Design, Tunneling"
-    }
-  ]
-}
-```
-
----
-
-## Search Modes
-
-| Mode       | When Used                          | How it Works                         |
-|------------|-------------------------------------|--------------------------------------|
-| structured | Role, location, experience queries  | Pandas `.str.contains()` + filters   |
-| semantic   | Skills, expertise, fuzzy queries    | Sentence embeddings + FAISS index    |
-| hybrid     | Complex queries (both)              | Structured filter → semantic re-rank |
-| auto       | Default                             | Parser decides based on query        |
-
----
-
-## Query Examples
-
-| Query                                              | Mode       |
-|-----------------------------------------------------|------------|
-| `show civil engineers in Chennai`                  | structured |
-| `find engineers with 5+ years experience`          | structured |
-| `developers with 3-6 years`                        | structured |
-| `show senior engineers`                            | structured |
-| `expert in tunneling and deep foundation work`     | semantic   |
-| `someone who knows machine learning and Python`    | semantic   |
-| `senior engineers in Bangalore who know Docker`    | hybrid     |
-
----
-
-## Generate Sample Excel
-
+### 3. Generate Sample Excel Data
+You can generate a dummy workforce Excel sheet containing various roles, skills, and experience structures to test immediately:
 ```bash
 python generate_sample_excel.py
-# Creates: sample_employees.xlsx (15 rows)
+# Creates: sample_employees.xlsx
 ```
 
----
+### 4. Run the API Locally
+Start the FastAPI server using Uvicorn:
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+Once started, the API is available at `http://localhost:8000`. You can visit Swagger Interactive Docs at `http://localhost:8000/docs`.
 
-## Run Tests
-
+### 5. Running the Test Suite
+The project contains unit and integration tests. Run them using:
 ```bash
 pytest tests/ -v
 ```
 
 ---
 
-## Interactive Docs
+## 🐳 Docker Deployment
 
-Once running, open:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+The application is containerized and can be launched instantly using Docker Compose:
+
+```bash
+# Build and run the container
+docker-compose up --build
+```
+The server will bind to port `8000` on the host machine.
 
 ---
 
-## Postman
+## 📬 API Specifications
 
-Import `postman_collection.json` into Postman and set the `file` field to your Excel.
+### `GET /health`
+Validates that the server is up and responsive.
+* **Response**:
+  ```json
+  {"status": "ok"}
+  ```
+
+### `POST /validate`
+Uploads and validates an Excel file schema.
+* **Form Parameters**:
+  * `file`: Excel Binary file (`.xlsx`)
+* **Response**:
+  ```json
+  {
+    "valid": true,
+    "rows": 16,
+    "columns": ["Name", "Role", "Location", "Experience", "Skills"],
+    "message": "Schema is valid. Ready for search."
+  }
+  ```
+
+### `POST /search`
+Main endpoint for searching candidates using natural language.
+* **Form Parameters**:
+  * `file`: Excel file (`.xlsx`)
+  * `query`: `"show electricians with knowledge about about current"`
+  * `mode`: `"auto"` (options: `"auto"`, `"structured"`, `"semantic"`, `"hybrid"`)
+* **Response Sample**:
+  ```json
+  {
+    "query": "show electricians with knowledge about about current",
+    "mode": "hybrid",
+    "filters_applied": {
+      "role": "Electrician",
+      "skills": ["Current"]
+    },
+    "total_in_file": 16,
+    "results_count": 1,
+    "results": [
+      {
+        "Name": "Lewis Curry",
+        "Role": "Electrician",
+        "Location": "Chennai",
+        "Experience": "1 year",
+        "Skills": "Electrical, Lighting",
+        "_similarity_score": 0.5074
+      }
+    ]
+  }
+  ```

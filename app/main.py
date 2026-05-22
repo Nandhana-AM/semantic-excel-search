@@ -69,7 +69,27 @@ async def search(
         raise HTTPException(status_code=422, detail=schema_error)
 
     # --- 4. Parse query ---
-    parsed = parse_query(query)
+    import re
+    dataset_roles = [str(r).strip() for r in df["Role"].dropna().unique() if str(r).strip()] if "Role" in df.columns else []
+    dataset_locations = [str(l).strip() for l in df["Location"].dropna().unique() if str(l).strip()] if "Location" in df.columns else []
+    dataset_names = [str(n).strip() for n in df["Name"].dropna().unique() if str(n).strip()] if "Name" in df.columns else []
+    
+    dataset_skills = []
+    if "Skills" in df.columns:
+        for val in df["Skills"].dropna().unique():
+            if isinstance(val, str):
+                for part in re.split(r",|;|and", val):
+                    part_clean = part.strip()
+                    if part_clean and part_clean not in dataset_skills:
+                        dataset_skills.append(part_clean)
+
+    parsed = parse_query(
+        query,
+        dataset_roles=dataset_roles,
+        dataset_locations=dataset_locations,
+        dataset_names=dataset_names,
+        dataset_skills=dataset_skills
+    )
 
     # --- 5. Determine mode ---
     if mode == "auto":
@@ -81,7 +101,7 @@ async def search(
     if selected_mode == "structured":
         results = structured_search(df, parsed)
     elif selected_mode == "semantic":
-        results = semantic_search(df, query)
+        results = semantic_search(df, query, parsed=parsed)
     else:  # hybrid
         results = hybrid_search(df, query, parsed)
 

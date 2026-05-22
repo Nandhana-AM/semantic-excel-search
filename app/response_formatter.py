@@ -68,10 +68,10 @@ def _sanitize_value(v: Any) -> Any:
 
 def _summarize_filters(parsed: Dict[str, Any]) -> Dict[str, Any]:
     """Extract only the applied (non-None) filter fields for display."""
-    filter_keys = ["role", "location", "experience_min", "experience_max", "experience_level"]
+    filter_keys = ["name", "role", "location", "experience_min", "experience_max", "experience_level", "skills"]
     summary = {}
     for k in filter_keys:
         v = parsed.get(k)
-        if v is not None:
+        if v is not None and v != []:  # Also skip empty skills list
             summary[k] = v
     return summary

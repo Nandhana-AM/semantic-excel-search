@@ -31,49 +31,75 @@ def structured_search(df: pd.DataFrame, parsed: Dict[str, Any]) -> List[Dict]:
     """
     filtered = df.copy()
 
-    # ── Role filter ───────────────────────────────────────────────────────────
-    if parsed.get("role"):
-        role_query = parsed["role"].lower()
+    # ── Name filter ───────────────────────────────────────────────────────────
+    if not filtered.empty and parsed.get("name"):
+        name_query = parsed["name"].lower()
         filtered = filtered[
-            filtered["Role"].str.lower().str.contains(role_query, na=False)
+            filtered["Name"].str.lower().str.contains(name_query, na=False)
         ]
 
+    # ── Role filter ───────────────────────────────────────────────────────────
+    if not filtered.empty and parsed.get("role"):
+        import re
+        role_query_words = re.findall(r"\b\w+\b", parsed["role"].lower())
+        
+        def role_matches(candidate_role):
+            if pd.isna(candidate_role):
+                return False
+            cand_role_lower = str(candidate_role).lower()
+            # Replace '/' with space to handle roles like UI/UX correctly
+            cand_role_normalized = re.sub(r"/", " ", cand_role_lower)
+            cand_words = re.findall(r"\b\w+\b", cand_role_normalized)
+            return all(any(q_word in c_word for c_word in cand_words) for q_word in role_query_words)
+            
+        filtered = filtered[filtered["Role"].apply(role_matches)]
+
     # ── Location filter ───────────────────────────────────────────────────────
-    if parsed.get("location"):
+    if not filtered.empty and parsed.get("location"):
         loc_query = parsed["location"].lower()
         filtered = filtered[
             filtered["Location"].str.lower().str.contains(loc_query, na=False)
         ]
 
-    # ── Experience filter ─────────────────────────────────────────────────────
-    # First, parse Experience column to numeric
-    filtered = _parse_experience_column(filtered)
-
-    if parsed.get("experience_level"):
-        level = parsed["experience_level"].replace(" ", "").lower()
-        level_key = None
-        for k in EXPERIENCE_LEVEL_MAP:
-            if level in k or k in level:
-                level_key = k
-                break
-        if level_key:
-            min_exp, max_exp = EXPERIENCE_LEVEL_MAP[level_key]
+    # ── Skills filter ─────────────────────────────────────────────────────────
+    skills_to_filter = parsed.get("known_skills") if parsed.get("known_skills") is not None else parsed.get("skills", [])
+    if not filtered.empty and skills_to_filter:
+        for skill in skills_to_filter:
+            skill_query = skill.lower()
             filtered = filtered[
-                (filtered["Experience_Numeric"] >= min_exp) &
-                (filtered["Experience_Numeric"] <= max_exp)
+                filtered["Skills"].str.lower().str.contains(skill_query, na=False)
             ]
 
-    elif parsed.get("experience_min") is not None:
-        min_exp = parsed["experience_min"]
-        filtered = filtered[filtered["Experience_Numeric"] >= min_exp]
+    # ── Experience filter ─────────────────────────────────────────────────────
+    if not filtered.empty:
+        # First, parse Experience column to numeric
+        filtered = _parse_experience_column(filtered)
 
-        if parsed.get("experience_max") is not None:
-            max_exp = parsed["experience_max"]
-            filtered = filtered[filtered["Experience_Numeric"] <= max_exp]
+        if parsed.get("experience_level"):
+            level = parsed["experience_level"].replace(" ", "").lower()
+            level_key = None
+            for k in EXPERIENCE_LEVEL_MAP:
+                if level in k or k in level:
+                    level_key = k
+                    break
+            if level_key:
+                min_exp, max_exp = EXPERIENCE_LEVEL_MAP[level_key]
+                filtered = filtered[
+                    (filtered["Experience_Numeric"] >= min_exp) &
+                    (filtered["Experience_Numeric"] <= max_exp)
+                ]
 
-    # ── Cleanup temp column ───────────────────────────────────────────────────
-    if "Experience_Numeric" in filtered.columns:
-        filtered.drop(columns=["Experience_Numeric"], inplace=True)
+        elif parsed.get("experience_min") is not None:
+            min_exp = parsed["experience_min"]
+            filtered = filtered[filtered["Experience_Numeric"] >= min_exp]
+
+            if parsed.get("experience_max") is not None:
+                max_exp = parsed["experience_max"]
+                filtered = filtered[filtered["Experience_Numeric"] <= max_exp]
+
+        # ── Cleanup temp column ───────────────────────────────────────────────────
+        if "Experience_Numeric" in filtered.columns:
+            filtered.drop(columns=["Experience_Numeric"], inplace=True)
 
     return filtered.to_dict(orient="records")
 

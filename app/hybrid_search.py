@@ -25,19 +25,28 @@ def hybrid_search(df: pd.DataFrame, query: str, parsed: Dict[str, Any]) -> List[
     if df.empty:
         return []
 
-    # ── Step 1: Structured filter ─────────────────────────────────────────────
-    structured_results = structured_search(df, parsed)
+    # ── Step 1: Structured filter (with known skills only) ────────────────────
+    # In hybrid mode, known skills are matched as hard structured filters,
+    # while dynamic/unknown skills are skipped here and matched semantically.
+    parsed_structured = parsed.copy()
+    parsed_structured["skills"] = parsed.get("known_skills", [])
+
+    structured_results = structured_search(df, parsed_structured)
 
     # ── Step 2: Semantic on filtered subset ───────────────────────────────────
-    if len(structured_results) >= MIN_STRUCTURED_RESULTS:
+    if structured_results:
         filtered_df = pd.DataFrame(structured_results)
-        semantic_results = semantic_search(filtered_df, query)
+        semantic_results = semantic_search(filtered_df, query, parsed=parsed)
     else:
-        # Not enough from structured → run semantic on full df
-        semantic_results = semantic_search(df, query)
+        semantic_results = []
 
     # ── Step 3: Merge + deduplicate ───────────────────────────────────────────
-    merged = _merge_results(structured_results, semantic_results)
+    # If dynamic skills are present, candidates must match them semantically.
+    # We exclude structured-only results that failed the dynamic skill semantic match.
+    if parsed and parsed.get("dynamic_skills"):
+        merged = semantic_results
+    else:
+        merged = _merge_results(structured_results, semantic_results)
 
     return merged
 
