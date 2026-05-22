@@ -1,0 +1,246 @@
+{
+  "info": {
+    "name": "Excel Intelligent Search API",
+    "description": "Week 3 - Excel-driven intelligent search with structured, semantic, and hybrid modes.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/health",
+        "description": "Check if API is running."
+      }
+    },
+    {
+      "name": "Root Info",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/",
+        "description": "API version and welcome message."
+      }
+    },
+    {
+      "name": "Validate Excel Schema",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/validate",
+        "description": "Upload Excel and check if schema is valid.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "sample_employees.xlsx",
+              "description": "Upload your Excel file here"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Search - Auto Mode (Structured query)",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/search",
+        "description": "Auto-detect query type. This query has role + location → structured.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "sample_employees.xlsx"
+            },
+            {
+              "key": "query",
+              "value": "show civil engineers in Chennai",
+              "type": "text"
+            },
+            {
+              "key": "mode",
+              "value": "auto",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Search - Auto Mode (Semantic query)",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/search",
+        "description": "Auto-detect query type. This query is fuzzy/semantic.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "sample_employees.xlsx"
+            },
+            {
+              "key": "query",
+              "value": "expert in tunneling and deep foundation work",
+              "type": "text"
+            },
+            {
+              "key": "mode",
+              "value": "auto",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Search - Force Structured Mode",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/search",
+        "description": "Force structured mode: filter by role + experience.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "sample_employees.xlsx"
+            },
+            {
+              "key": "query",
+              "value": "senior engineers with 5+ years experience",
+              "type": "text"
+            },
+            {
+              "key": "mode",
+              "value": "structured",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Search - Force Semantic Mode",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/search",
+        "description": "Force semantic mode: find similar profiles.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "sample_employees.xlsx"
+            },
+            {
+              "key": "query",
+              "value": "someone who works with cloud infrastructure and microservices",
+              "type": "text"
+            },
+            {
+              "key": "mode",
+              "value": "semantic",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Search - Force Hybrid Mode",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/search",
+        "description": "Force hybrid mode: combine structured filters + semantic ranking.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "sample_employees.xlsx"
+            },
+            {
+              "key": "query",
+              "value": "senior engineers in Bangalore who know machine learning and Python",
+              "type": "text"
+            },
+            {
+              "key": "mode",
+              "value": "hybrid",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Search - Experience Range Filter",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/search",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "sample_employees.xlsx"
+            },
+            {
+              "key": "query",
+              "value": "engineers with 3-6 years experience",
+              "type": "text"
+            },
+            {
+              "key": "mode",
+              "value": "structured",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Error - Invalid File Type",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/search",
+        "description": "Should return 400 - not an Excel file.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "some_file.csv"
+            },
+            {
+              "key": "query",
+              "value": "engineers",
+              "type": "text"
+            },
+            {
+              "key": "mode",
+              "value": "auto",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
