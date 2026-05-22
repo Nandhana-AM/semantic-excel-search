@@ -193,11 +193,11 @@ Main endpoint for searching candidates using natural language.
 * **Response Sample**:
   ```json
   {
-    "query": "show electricians with knowledge about about current",
+    "query": "show electricians with knowledge about about wiring",
     "mode": "hybrid",
     "filters_applied": {
       "role": "Electrician",
-      "skills": ["Current"]
+      "skills": ["Wiring"]
     },
     "total_in_file": 16,
     "results_count": 1,
